@@ -8,6 +8,7 @@ class Shell:
     def __init__(self, prompt=lambda: "user@so-simulator:~ $ "):
         self.prompt = prompt
         self.comandos = {}
+        self.pos_comando = []        # ganchos chamados ao fim de cada comando (ex.: flush da E/S)
 
     def registrar(self, nome, funcao, ajuda=""):
         self.comandos[nome] = (funcao, ajuda)
@@ -31,6 +32,12 @@ class Shell:
             print(f"erro: {e}")
         except (IndexError, ValueError):
             print("erro: argumentos inválidos (digite 'help')")
+        finally:
+            for gancho in self.pos_comando:
+                try:
+                    gancho()
+                except FSError as e:
+                    print(f"erro: {e}")
 
     def loop(self):
         while True:

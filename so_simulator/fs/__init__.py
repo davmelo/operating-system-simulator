@@ -5,8 +5,9 @@ from .filesystem import FileSystem
 from .comandos import registrar
 
 
-def criar_filesystem(estrategia="indexada", block_size=4096, n_blocks=16):
-    dev = BlockDevice(block_size, n_blocks)
+def criar_filesystem(estrategia="indexada", block_size=4096, n_blocks=16, dispositivo=None):
+    """`dispositivo` permite plugar outra camada com a interface do BlockDevice (Etapa 2)."""
+    dev = dispositivo or BlockDevice(block_size, n_blocks)
     return FileSystem(dev, ALOCADORES[estrategia](dev))
 
 
