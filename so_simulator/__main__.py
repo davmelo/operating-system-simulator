@@ -5,6 +5,7 @@ from .io.raid import MIN_DISCOS
 from .io.scheduler import ALGORITMOS
 from .io.ssd import MODOS_WL
 from .shell import Shell
+from .security.security import SecurityManager, registrar as registrar_seguranca
 
 
 def main():
@@ -31,6 +32,9 @@ def main():
     shell = Shell(prompt=lambda: f"user@so-simulator:~{sistema.cwd.path()} $ ")
     modulo_fs.registrar(shell, sistema)                       # Etapa 1
     modulo_io.registrar(shell, entrada_saida, sistema)        # Etapa 2
+    seguranca = SecurityManager(sistema)                      # Etapa 3
+    registrar_seguranca(shell, seguranca)
+    shell.prompt = lambda: f"{seguranca.current_user}@so-simulator:{sistema.cwd.path()} $ "
 
     print(f"Simulador de SO iniciado (alocação {args.strategy}; "
           f"armazenamento: {entrada_saida.backend.descricao()}). Digite 'help'.")

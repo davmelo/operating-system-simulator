@@ -55,6 +55,13 @@ def registrar(shell, es, fs):
     def write_file(a):
         caminho, resto = a[0], a[1:]
         teste = "--teste-falha" in resto
+        key = None
+        if "--key" in resto:
+            pos_key = resto.index("--key")
+            if pos_key + 1 >= len(resto):
+                raise FSError("faltou o valor de --key")
+            key = resto[pos_key + 1]
+            del resto[pos_key:pos_key + 2]
         resto = [x for x in resto if x != "--teste-falha"]
         if "--size" in resto:
             dados = _conteudo(caminho, parse_size(_opcao(resto, "--size")))
@@ -68,15 +75,25 @@ def registrar(shell, es, fs):
             fs.resolve(caminho)
         except FSError:
             fs.create(caminho)
-        fs.write_file(caminho, dados)
+        fs.write_file(caminho, dados, key=key)
         es.flush()
         if teste:
             es.teste_falha()
 
     def read_file(a):
-        texto = fs.read_file(a[0]).rstrip(b"\0")
-        if texto:
-            print(texto.decode("utf-8", "replace"))
+        if not a:
+            raise FSError("uso: read_file <arquivo> [--key CHAVE]")
+        caminho = a[0]
+        key = _opcao(a, "--key") if "--key" in a else None
+        # A leitura física passa pelo FS; arquivos cifrados só são apresentados
+        # após validação da chave e do MAC na camada de Segurança.
+        dados = fs.read_file(caminho, key=key).rstrip(b"\0")
+        node = fs.resolve(caminho)
+        print(f"[SISTEMA DE ARQUIVOS] Leitura concluída: {node.path()} ({node.size} bytes)")
+        if dados:
+            print(dados.decode("utf-8", "replace"))
+        else:
+            print("[arquivo vazio]")
 
     # ------------------------------------------------------------ escalonamento
     def io_sched(a):
@@ -198,7 +215,7 @@ def registrar(shell, es, fs):
         demonstracao(int(_opcao(a, "--writes", "2000")))
 
     r = shell.registrar
-    r("write_file", write_file, 'write_file <arquivo> "texto" | --size 8KB [--teste-falha]  (cria se preciso; gera E/S)')
+    r("write_file", write_file, 'write_file <arquivo> "texto" | --size 8KB [--key CHAVE] [--teste-falha]  (cria se preciso; gera E/S)')
     r("read_file", read_file, "read_file <arquivo>  (lê o conteúdo; gera E/S)")
     r("io_sched", io_sched, "io_sched --tracks 98,183,37 --head 53 [--algo sstf|all] [--max 199] [--dir up|down]  (demo)")
     r("io_algo", io_algo, "io_algo [fcfs|sstf|scan|look|cscan|clook]  (escalonador do braço)")
