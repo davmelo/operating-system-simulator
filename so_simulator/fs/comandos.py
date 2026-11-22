@@ -41,8 +41,25 @@ def registrar(shell, fs):
         rec(fs.root, "")
 
     def cat(a):
-        dados = fs.read_file(a[0])
-        n = fs.resolve(a[0])
+        if not a:
+            raise FSError("uso: cat <arquivo> [--key CHAVE]")
+
+        caminho = a[0]
+        key = _opcao(a, "--key") if "--key" in a else None
+
+        dados = fs.read_file(caminho, key=key)
+        n = fs.resolve(caminho)
+
+        print(
+            f"{n.path()} | {n.size} bytes | dono: {n.owner} "
+            f"| perms: {oct(n.perms)[2:]} "
+            f"| dados: {n.blocks} | i-node: {n.inode}"
+        )
+
+        texto = dados.rstrip(b"\0")
+        if texto:
+            print(texto.decode("utf-8", "replace"))
+
         print(f"{n.path()} | {n.size} bytes | dono: {n.owner} | perms: {oct(n.perms)[2:]} "
               f"| dados: {n.blocks} | i-node: {n.inode}")
         texto = dados.rstrip(b"\0")
@@ -53,17 +70,29 @@ def registrar(shell, fs):
         fs.compactar()
         print("Disco compactado.")
 
+    def write(a):
+        key = _opcao(a, "--key") if "--key" in a else None
+        fs.write_file(a[0], _dados(a[1:]), key=key)
+
+    def append(a):
+        key = _opcao(a, "--key") if "--key" in a else None
+        fs.append_file(a[0], _dados(a[1:]), key=key)
+
     shell.registrar("mkdir", lambda a: fs.mkdir(a[0]), "mkdir <caminho>")
     shell.registrar("create", create, "create <caminho> [--size 10KB]")
     shell.registrar("ls", ls, "ls [caminho]")
     shell.registrar("tree", tree, "tree")
     shell.registrar("cd", lambda a: fs.cd(a[0] if a else "/"), "cd [caminho]")
     shell.registrar("pwd", lambda a: print(fs.cwd.path()), "pwd")
-    shell.registrar("cat", cat, "cat <arquivo>  (metadados + conteúdo)")
-    shell.registrar("write", lambda a: fs.write_file(a[0], _dados(a[1:])),
-                    'write <arquivo> --size N | --text "..."  (substitui o conteúdo)')
-    shell.registrar("append", lambda a: fs.append_file(a[0], _dados(a[1:])),
-                    'append <arquivo> --size N | --text "..."  (acrescenta)')
+    shell.registrar(
+        "cat",
+        cat,
+        "cat <arquivo> [--key CHAVE]  (metadados + conteúdo)"
+    )
+    shell.registrar("write", write,
+                    'write <arquivo> --size N | --text "..." [--key CHAVE]  (substitui o conteúdo)')
+    shell.registrar("append", append,
+                    'append <arquivo> --size N | --text "..." [--key CHAVE]  (acrescenta)')
     shell.registrar("mv", lambda a: fs.move(a[0], a[1]), "mv <origem> <destino>")
     shell.registrar("rm", lambda a: fs.remove(a[0]), "rm <arquivo>")
     shell.registrar("rmdir", lambda a: fs.rmdir(a[0]), "rmdir <diretório>")

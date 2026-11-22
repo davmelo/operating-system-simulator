@@ -103,3 +103,57 @@ a faixa é a 1 e a paridade do RAID 5 gira entre os discos.)
 Leituras são atendidas na hora e escritas no fim do comando; o escalonador reordena só o
 atendimento físico (os dados seguem a ordem do programa). Liberar bloco (`rm`) não gera E/S no
 HDD/RAID (só metadado) e vira TRIM no SSD. Blocos nunca gravados leem zeros sem E/S.
+
+## Etapa 3: Segurança e Proteção
+
+O módulo `security/` integra autenticação, privilégios, permissões Unix, criptografia
+simulada em repouso e auditoria de integridade ao FS e à camada de E/S.
+
+Comandos (a sessão inicial é `root`, senha `root`):
+
+```
+login --user root --password root
+useradd carlos MinhaSenha devs
+logout
+login --user carlos --password MinhaSenha
+mkdir /home/carlos/documentos
+write_file /home/carlos/documentos/segredo.txt --text "meu conteúdo"
+read_file /home/carlos/documentos/segredo.txt
+cat /home/carlos/documentos/segredo.txt
+logout
+login --user root --password root
+chmod /sistema/config.sys 750
+encrypt_file /home/carlos/segredo.txt --key MinhaChave123
+logout
+login --user carlos --password MinhaSenha
+read_file /home/carlos/segredo.txt --key MinhaChave123
+logout
+login --user root --password root
+decrypt_file /home/carlos/segredo.txt --key MinhaChave123
+antivirus_scan /
+security_log
+```
+
+`useradd` e `groupadd` exigem root. Ao cadastrar um usuário, o simulador cria
+`/home/<usuário>` com proprietário e grupo corretos (permissão inicial `750`).
+Usuários comuns podem criar arquivos e subdiretórios dentro de seu próprio diretório
+pessoal, mas não diretamente em `/home` ou `/`. A travessia de cada diretório do
+caminho exige permissão `x`; criar/remover entradas exige `wx` no diretório pai.
+`chmod`, criptografia e operações globais de manutenção/alteração de RAID/SSD também
+exigem MODO_KERNEL. O hash de senha usa
+PBKDF2-HMAC-SHA256 com salt aleatório. A ACL implementa permissões POSIX rwx para
+proprietário, grupo e outros, além de entradas específicas por usuário via `Node.acl`.
+
+Arquivos criptografados **não são descriptografados automaticamente**. O comando
+`read_file <arquivo> --key CHAVE` exige a chave, valida o autenticador (HMAC) e só
+então apresenta o conteúdo em memória; a gravação física permanece cifrada.
+`read_file` sem `--key`, ou com chave incorreta, é recusado. `write_file`, `write`
+e `append` em arquivos cifrados também exigem `--key`. `decrypt_file <arquivo>
+--key CHAVE` remove permanentemente a criptografia e grava o texto claro no disco.
+A chave não é armazenada nos metadados: são persistidos apenas salt, nonce,
+verificador derivado e MAC. A varredura sem a chave verifica os hashes dos blocos,
+mas informa que não conseguiu validar o MAC nem procurar assinaturas no texto claro.
+
+**Nota didática:** a cifra em repouso é uma simulação baseada em fluxo derivado de
+SHA-256 e autenticação HMAC, não uma implementação criptográfica para produção.
+Use uma biblioteca auditada com AES-GCM ou ChaCha20-Poly1305 em sistemas reais.

@@ -1,4 +1,5 @@
 import time
+import hashlib
 from .erros import FSError
 from .node import Node
 
@@ -15,6 +16,7 @@ class FileSystem:
         self.alloc = allocator
         self.user = user
         self.guard = guard
+        self.security = None
         self.root = Node("", True, owner=user)
         self.cwd = self.root
         self.alloc.reservar_raiz(self.root)
@@ -32,6 +34,10 @@ class FileSystem:
             if parte == "..":
                 node = node.parent or node
             elif node.is_dir and parte in node.children:
+                # Para atravessar um diretório é necessário o bit de execução (x).
+                # A verificação ocorre em cada componente do caminho, não apenas
+                # no arquivo final.
+                self._autorizar("executar", node)
                 node = node.children[parte]
             else:
                 raise FSError(f"caminho não encontrado: {path}")
@@ -61,17 +67,21 @@ class FileSystem:
     # ------------------------------------------------------------ criar
     def mkdir(self, path):
         parent, name = self.resolve_parent(path)
-        self._autorizar("escrever", parent)
+        self._autorizar("criar", parent)
         if name in parent.children:
             raise FSError("já existe")
-        parent.children[name] = Node(name, True, parent, owner=self.user)
+        node = Node(name, True, parent, owner=self.user)
+        if self.security:
+            node.group = self.security.users[self.user]["group"]
+        parent.children[name] = node
 
     def create(self, path, size=0):
         parent, name = self.resolve_parent(path)
-        self._autorizar("escrever", parent)
+        self._autorizar("criar", parent)
         if name in parent.children:
             raise FSError("já existe")
         node = Node(name, False, parent, owner=self.user)
+        if self.security: node.group = self.security.users[self.user]["group"]
         self.alloc.allocate(node, size)          # se falhar, o arquivo não é criado
         parent.children[name] = node
 
@@ -86,12 +96,19 @@ class FileSystem:
     def _ler(self, node):
         return b"".join(self.dev.read_block(b) for b in node.blocks)[:node.size]
 
-    def read_file(self, path):
+    def read_file(self, path, key=None):
         node = self.resolve(path)
         if node.is_dir:
             raise FSError("é um diretório")
         self._autorizar("ler", node)
-        return self._ler(node)
+        dados = self._ler(node)
+        if node.crypto:
+            if key is None:
+                raise FSError("[SEGURANÇA] Arquivo criptografado. Informe a chave com --key.")
+            if not self.security:
+                raise FSError("módulo de segurança indisponível")
+            dados = self.security.decrypt_payload(node, dados, key)
+        return dados
 
     def cd(self, path):
         node = self.resolve(path)
@@ -115,22 +132,49 @@ class FileSystem:
 
     def _escrever_blocos(self, node, dados):
         bs = self.dev.block_size
+        node.block_hashes = {}
         for k, b in enumerate(node.blocks):
-            self.dev.write_block(b, dados[k * bs:(k + 1) * bs])
+            chunk = dados[k * bs:(k + 1) * bs]
+            self.dev.write_block(b, chunk)
+            node.block_hashes[b] = hashlib.sha256(self.dev.read_block(b)).hexdigest()
 
-    def write_file(self, path, dados):
+    def write_file(self, path, dados, key=None):
         node = self.resolve(path)
         if node.is_dir:
             raise FSError("é um diretório")
         self._autorizar("escrever", node)
-        self._gravar(node, dados)
+        if node.crypto:
+            if key is None:
+                raise FSError("[SEGURANÇA] Arquivo criptografado. Informe a chave com --key para escrever.")
+            crypto_before = dict(node.crypto)
+            dados = self.security.encrypt_payload(node, dados, key)
+            try:
+                self._gravar(node, dados)
+            except Exception:
+                node.crypto = crypto_before
+                raise
+        else:
+            self._gravar(node, dados)
 
-    def append_file(self, path, dados):
+    def append_file(self, path, dados, key=None):
         node = self.resolve(path)
         if node.is_dir:
             raise FSError("é um diretório")
         self._autorizar("escrever", node)
-        self._gravar(node, self._ler(node) + dados)
+        atual = self._ler(node)
+        if node.crypto:
+            if key is None:
+                raise FSError("[SEGURANÇA] Arquivo criptografado. Informe a chave com --key para acrescentar conteúdo.")
+            atual = self.security.decrypt_payload(node, atual, key)
+            crypto_before = dict(node.crypto)
+            dados = self.security.encrypt_payload(node, atual + dados, key)
+            try:
+                self._gravar(node, dados)
+            except Exception:
+                node.crypto = crypto_before
+                raise
+        else:
+            self._gravar(node, atual + dados)
 
     def move(self, origem, destino):
         src = self.resolve(origem)
