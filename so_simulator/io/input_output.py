@@ -27,6 +27,8 @@ class InputOutput:
         self.algo = "fcfs"
         self.set_algo(algo)
         self.log = True
+        self.etiqueta = "E/S"                            # prefixo dos logs ("E/S - SWAP" no swap)
+        self.origem = "Sistema de Arquivos"              # quem gera as solicitações
         self.rotulo = lambda b: f"Bloco lógico {b}"      # o main troca por nome de arquivo/parte
         self._pend_w = {}
         self._ops = []                                   # (op, bloco) lógicos do comando atual
@@ -128,7 +130,7 @@ class InputOutput:
         itens = [f"{nomes[op]} do bloco {b}" for op, b in ops]
         if len(itens) > 8:
             itens = itens[:8] + [f"... (+{len(itens) - 8})"]
-        print(f"[E/S] Solicitações do Sistema de Arquivos: {', '.join(itens)}")
+        print(f"[{self.etiqueta}] Solicitações do {self.origem}: {', '.join(itens)}")
 
     def _flush_hdd(self, ops, mostrar):
         be = self.backend
@@ -157,9 +159,9 @@ class InputOutput:
             print("\n[E/S - DISTRIBUIÇÃO EM DISCO]")
             print("\n".join(dist))
         for e in eventos:
-            print(f"[E/S] {e}")
+            print(f"[{self.etiqueta}] {e}")
         for d, inicio, trilhas, plano in planos:
-            pre = f"[E/S - Disco {d.id}]" if multi else "[E/S]"
+            pre = f"[{self.etiqueta} - Disco {d.id}]" if multi else f"[{self.etiqueta}]"
             if len(trilhas) == 1:
                 print(f"\n{pre} 1 requisição na trilha {trilhas[0]} | cabeça: trilha {inicio} → "
                       f"{plano.final} ({plano.total} trilhas)")
@@ -178,11 +180,11 @@ class InputOutput:
             return
         self._cabecalho(ops)
         print(f"Dispositivo Ativo: {be.descricao()}")
-        print("[E/S - SSD] SSD não tem braço: sem escalonamento de trilhas; "
+        print(f"[{self.etiqueta} - SSD] SSD não tem braço: sem escalonamento de trilhas; "
               "acesso por páginas via FTL")
         for e in eventos:
             print(f"  {e}")
-        print(f"[E/S - SSD] {be.resumo()}")
+        print(f"[{self.etiqueta} - SSD] {be.resumo()}")
 
     # ------------------------------------------------------------ utilidades de RAID
     def teste_falha(self, bloco=None, disco=None):
