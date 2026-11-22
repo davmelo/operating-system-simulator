@@ -13,6 +13,9 @@ class Node:
         self.blocks = []            # blocos de DADOS do arquivo
         self.inode = None           # bloco de índice (alocação indexada)
         self.owner = owner
+        self.group = "root" if owner == "root" else "users"
+        self.crypto = None
+        self.block_hashes = {}
         self.perms = perms if perms is not None else (0o755 if is_dir else 0o644)
         self.acl = {}               # reservado: Etapa 3 (usuário -> permissões)
         self.created = self.modified = time.time()
